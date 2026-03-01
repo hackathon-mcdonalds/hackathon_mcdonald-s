@@ -1,0 +1,20 @@
+{
+  "name": "cibuschain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infraestructura tecnológica para el rescate de alimentos preparados — Feed the Future Hackathon 2026",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:dashboard": "pnpm --filter dashboard dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "db:migrate": "cd apps/api && alembic upgrade head",
+    "db:rollback": "cd apps/api && alembic downgrade -1",
+    "db:reset": "cd apps/api && alembic downgrade base && alembic upgrade head"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

@@ -1,0 +1,82 @@
+version: '3.9'
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CibusChain — Entorno de Desarrollo Local
+#
+# USO:
+#   docker compose up          → levanta todo
+#   docker compose up -d       → levanta en background
+#   docker compose down        → apaga todo
+#   docker compose down -v     → apaga y borra los datos (reset total)
+#
+# PRIMERA VEZ:
+#   docker compose up → espera a que diga "database system is ready to accept connections"
+#   → en otra terminal: cd apps/api && alembic upgrade head
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Base de Datos Principal ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: cibuschain_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cibuschain_dev
+      POSTGRES_USER: cibuschain
+      POSTGRES_PASSWORD: cibuschain_dev_password   # solo para desarrollo local
+    ports:
+      - "5432:5432"    # tu máquina:contenedor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data     # los datos persisten aunque apagues docker
+      - ./scripts/db_init.sql:/docker-entrypoint-initdb.d/init.sql  # corre al crear la DB por primera vez
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cibuschain -d cibuschain_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (Cola de Misiones) ─────────────────────────────────────────────
+  # Por qué Redis: cuando Sentinel crea una misión, la notificación tiene que
+  # llegar al voluntario en tiempo real. Redis actúa como el "tablero de anuncios"
+  # — la API publica la misión y la app móvil está escuchando.
+  redis:
+    image: redis:7-alpine
+    container_name: cibuschain_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── API (FastAPI) ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: cibuschain_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cibuschain:cibuschain_dev_password@postgres:5432/cibuschain_dev
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-key-change-in-production-never-use-this
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8081"]'
+    ports:
+      - "8000:8000"    # API disponible en http://localhost:8000
+      # Docs automáticas: http://localhost:8000/docs
+    volumes:
+      - ./apps/api:/app   # hot reload: cambios en código se reflejan sin reiniciar
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:      # volumen persistente — tus datos no se borran al reiniciar docker

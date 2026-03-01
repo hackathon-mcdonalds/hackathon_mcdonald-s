@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+# Por qué slim: imagen más pequeña. No incluye herramientas de compilación
+# que no necesitamos en producción. En dev está bien.
+
+WORKDIR /app
+
+# Instala dependencias del sistema necesarias para algunas librerías de Python
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copia primero solo requirements.txt
+# Por qué primero: Docker cachea cada paso. Si copias el código completo primero,
+# cualquier cambio en tu código invalida el caché y reinstala todo.
+# Así, las dependencias solo se reinstalan si cambias requirements.txt.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Ahora copia el resto del código
+COPY . .
+
+EXPOSE 8000

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Variables de entorno — NUNCA subir al repo
+.env
+*.env.local
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+
+# Base de datos local
+*.db
+*.sqlite
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
