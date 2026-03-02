@@ -29,7 +29,7 @@ services:
       - "5432:5432"    # tu máquina:contenedor
     volumes:
       - postgres_data:/var/lib/postgresql/data     # los datos persisten aunque apagues docker
-      - ./scripts/db_init.sql:/docker-entrypoint-initdb.d/init.sql  # corre al crear la DB por primera vez
+      - ./scripts/db_init.sql:/docker-entrypoint-initdb.d/init.sql:z  # corre al crear la DB por primera vez
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cibuschain -d cibuschain_dev"]
       interval: 5s
@@ -70,7 +70,7 @@ services:
       - "8000:8000"    # API disponible en http://localhost:8000
       # Docs automáticas: http://localhost:8000/docs
     volumes:
-      - ./apps/api:/app   # hot reload: cambios en código se reflejan sin reiniciar
+      - ./apps/api:/app:z   # hot reload: cambios en código se reflejan sin reiniciar
     depends_on:
       postgres:
         condition: service_healthy
