@@ -1,0 +1,17 @@
+FROM node:20-alpine
+
+# Instala pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copia lockfile y manifest primero (mejor cache de Docker)
+COPY package.json pnpm-lock.yaml ./
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["pnpm", "dev"]

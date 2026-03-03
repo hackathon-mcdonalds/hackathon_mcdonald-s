@@ -1,0 +1,24 @@
+FROM node:20-alpine
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+RUN apk add --no-cache git
+
+# 1. CRÍTICO: Fuerza el polling para que el Hot Reload (Metro) funcione en Docker/Alpine
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+WORKDIR /app
+
+# 2. Nota monorepo: Si pnpm-lock.yaml está en la raíz del proyecto y no en apps/mobile, 
+# el build fallará aquí. Asegúrate de que el contexto del compose o las copias sean correctas.
+COPY package.json pnpm-lock.yaml ./
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+# 3. Limpieza: Expo moderno solo necesita el 8081
+EXPOSE 8081
+
+CMD ["pnpm", "expo", "start", "--tunnel"]

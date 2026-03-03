@@ -1,5 +1,4 @@
 version: '3.9'
-
 # ──────────────────────────────────────────────────────────────────────────────
 # CibusChain — Entorno de Desarrollo Local
 #
@@ -12,10 +11,12 @@ version: '3.9'
 # PRIMERA VEZ:
 #   docker compose up → espera a que diga "database system is ready to accept connections"
 #   → en otra terminal: cd apps/api && alembic upgrade head
+#
+# MOBILE:
+#   Después de levantar, escanea el QR con Expo Go en tu celular.
+#   Si no conecta, cambia EXPO_HOST_IP por tu IP local (ifconfig | grep inet)
 # ──────────────────────────────────────────────────────────────────────────────
-
 services:
-
   # ── Base de Datos Principal ──────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
@@ -26,10 +27,10 @@ services:
       POSTGRES_USER: cibuschain
       POSTGRES_PASSWORD: cibuschain_dev_password   # solo para desarrollo local
     ports:
-      - "5432:5432"    # tu máquina:contenedor
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data     # los datos persisten aunque apagues docker
-      - ./scripts/db_init.sql:/docker-entrypoint-initdb.d/init.sql:z  # corre al crear la DB por primera vez
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db_init.sql:/docker-entrypoint-initdb.d/init.sql:z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cibuschain -d cibuschain_dev"]
       interval: 5s
@@ -37,9 +38,6 @@ services:
       retries: 5
 
   # ── Redis (Cola de Misiones) ─────────────────────────────────────────────
-  # Por qué Redis: cuando Sentinel crea una misión, la notificación tiene que
-  # llegar al voluntario en tiempo real. Redis actúa como el "tablero de anuncios"
-  # — la API publica la misión y la app móvil está escuchando.
   redis:
     image: redis:7-alpine
     container_name: cibuschain_redis
@@ -62,15 +60,15 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://cibuschain:cibuschain_dev_password@postgres:5432/cibuschain_dev
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: dev-secret-key-change-in-production-never-use-this
-      ENVIRONMENT: development
+      SECRET_KEY: ${SECRET_KEY}
+      ENVIRONMENT: ${ENVIROMENT}
       LOG_LEVEL: debug
       CORS_ORIGINS: '["http://localhost:3000", "http://localhost:8081"]'
     ports:
-      - "8000:8000"    # API disponible en http://localhost:8000
-      # Docs automáticas: http://localhost:8000/docs
+      - "8000:8000"    # API en http://localhost:8000
+                       # Docs en http://localhost:8000/docs
     volumes:
-      - ./apps/api:/app:z   # hot reload: cambios en código se reflejan sin reiniciar
+      - ./apps/api:/app:z   # hot reload
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,5 +76,58 @@ services:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # ── Web App (Next.js) ────────────────────────────────────────────────────
+  # Disponible en http://localhost:3000
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    container_name: cibuschain_web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app:z   # hot reload
+      - /app/node_modules   # aísla node_modules del contenedor — no los sobreescribe el bind mount
+      - /app/.next          # ídem para el cache de build de Next
+    depends_on:
+      - api
+    command: pnpm dev
+
+  # ── Mobile App (Expo / React Native) ────────────────────────────────────
+  # Metro bundler en http://localhost:8081
+  # QR para Expo Go en http://localhost:19002
+  #
+  # ⚠️  IMPORTANTE: cambia EXPO_HOST_IP por tu IP local real.
+  #     Mac/Linux: ifconfig | grep "inet " | grep -v 127
+  #     Windows:   ipconfig | findstr IPv4
+  #
+  mobile:
+    build:
+      context: ./apps/mobile/
+      dockerfile: Dockerfile.dev
+    container_name: cibuschain_mobile
+    restart: unless-stopped
+    environment:
+      EXPO_HOST_IP: ${EXPO_GO_IP}          # ← cambia esto por tu IP local
+      REACT_NATIVE_PACKAGER_HOSTNAME: ${EXPO_GO_IP}    # ← ídem
+      API_URL: http://${EXPO_GO_IP}:8000   # ← ídem (el celular no entiende "localhost")
+    ports:
+      - "8081:8081"    # Metro bundler
+      - "19000:19000"  # Expo Go tunnel
+      - "19001:19001"  # Expo Go tunnel WS
+      - "19002:19002"  # Expo DevTools / QR
+    volumes:
+      - ./apps/mobile:/app:z
+      - /app/node_modules
+    depends_on:
+      - api
+    command: pnpm expo start --tunnel
+    stdin_open: true
+    tty: true
+
 volumes:
-  postgres_data:      # volumen persistente — tus datos no se borran al reiniciar docker
+  postgres_data:    # los datos de postgres persisten entre reinicios
